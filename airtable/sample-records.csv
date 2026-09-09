@@ -1,0 +1,4 @@
+Lead ID,Email,Phone,First Name,Last Name,ZIP,Gender,Age Range,Lead Grade,Qualified,Status,Event ID,Event Name,Match Quality,Estimated Monthly,UTM Source,UTM Campaign
+ld_demo_001,alex.rivera@example.com,4155550199,Alex,Rivera,94110,Female,55-63,A,Yes,New,evt_complete_001,CompleteRegistration,8.4,2840,facebook,ssdi-lookalike
+ld_demo_002,sam.lee@example.com,3125550144,Sam,Lee,60614,Male,40-49,B,Yes,New,evt_complete_002,CompleteRegistration,7.1,1980,facebook,retarget
+ld_demo_003,pat.nguyen@example.com,2135550177,Pat,Nguyen,90012,Male,50-54,A,Yes,Restricted,evt_complete_003,CompleteRegistration,8.0,2460,google,brand

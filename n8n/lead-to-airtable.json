@@ -1,0 +1,282 @@
+{
+  "name": "BenefitPath Lead Ingest → Airtable",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "benefitpath-lead",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-lead",
+      "name": "Lead Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 300],
+      "webhookId": "benefitpath-lead"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "secret-check",
+              "leftValue": "={{ $json.headers['x-webhook-secret'] || $json.headers['X-Webhook-Secret'] }}",
+              "rightValue": "={{ $env.N8N_WEBHOOK_SECRET }}",
+              "operator": { "type": "string", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-secret",
+      "name": "Valid Secret?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst required = ['leadId', 'eventId', 'eventName'];\nfor (const key of required) {\n  if (!body[key]) throw new Error(`Missing ${key}`);\n}\nif (!['Lead', 'CompleteRegistration'].includes(body.eventName)) {\n  return [{ json: { skip: true, reason: 'non_conversion_event', ...body } }];\n}\nconst status = body.qualified === false ? 'Disqualified' : body.restrictedState ? 'Restricted' : 'New';\nreturn [{ json: {\n  skip: false,\n  lead_id: body.leadId,\n  event_id: body.eventId,\n  event_name: body.eventName,\n  email: (body.email || '').toLowerCase().trim(),\n  phone: String(body.phone || '').replace(/\\D/g, '').slice(-10),\n  first_name: body.firstName || '',\n  last_name: body.lastName || '',\n  zip: String(body.zip || '').replace(/\\D/g, '').slice(0, 5),\n  gender: body.gender || '',\n  age_range: body.ageRange || '',\n  grade: body.grade || '',\n  qualified: body.qualified ? 'Yes' : 'No',\n  status,\n  disqualify_reason: body.disqualifyReason || '',\n  estimated_monthly: body.estimatedMonthly || 0,\n  match_quality: body.matchQuality || 0,\n  answers: JSON.stringify(body.answers || {}),\n  utm_source: body.tracking?.utm_source || '',\n  utm_campaign: body.tracking?.utm_campaign || '',\n  fbp: body.tracking?.fbp || '',\n  fbc: body.tracking?.fbc || '',\n  consent_ts: body.consent?.timestamp || '',\n  received_at: body.createdAt || new Date().toISOString()\n} }];"
+      },
+      "id": "normalize",
+      "name": "Normalize Lead",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 220]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "skip-check",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "false" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-convert",
+      "name": "Is Conversion?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [740, 220]
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": { "__rl": true, "mode": "id", "value": "REPLACE_AIRTABLE_BASE_ID" },
+        "table": { "__rl": true, "mode": "name", "value": "Leads" },
+        "filterByFormula": "={Lead ID} = '{{ $json.lead_id }}'",
+        "options": {}
+      },
+      "id": "airtable-search",
+      "name": "Find Existing Lead",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [980, 140]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "exists",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "exists" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-exists",
+      "name": "Lead Exists?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1220, 140]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": { "__rl": true, "mode": "id", "value": "REPLACE_AIRTABLE_BASE_ID" },
+        "table": { "__rl": true, "mode": "name", "value": "Leads" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('Find Existing Lead').item.json.id }}",
+            "Email": "={{ $('Normalize Lead').item.json.email }}",
+            "Phone": "={{ $('Normalize Lead').item.json.phone }}",
+            "First Name": "={{ $('Normalize Lead').item.json.first_name }}",
+            "Last Name": "={{ $('Normalize Lead').item.json.last_name }}",
+            "ZIP": "={{ $('Normalize Lead').item.json.zip }}",
+            "Gender": "={{ $('Normalize Lead').item.json.gender }}",
+            "Age Range": "={{ $('Normalize Lead').item.json.age_range }}",
+            "Lead Grade": "={{ $('Normalize Lead').item.json.grade }}",
+            "Qualified": "={{ $('Normalize Lead').item.json.qualified }}",
+            "Status": "={{ $('Normalize Lead').item.json.status }}",
+            "Event ID": "={{ $('Normalize Lead').item.json.event_id }}",
+            "Event Name": "={{ $('Normalize Lead').item.json.event_name }}",
+            "Match Quality": "={{ $('Normalize Lead').item.json.match_quality }}",
+            "Estimated Monthly": "={{ $('Normalize Lead').item.json.estimated_monthly }}",
+            "Answers JSON": "={{ $('Normalize Lead').item.json.answers }}",
+            "UTM Source": "={{ $('Normalize Lead').item.json.utm_source }}",
+            "UTM Campaign": "={{ $('Normalize Lead').item.json.utm_campaign }}",
+            "fbp": "={{ $('Normalize Lead').item.json.fbp }}",
+            "fbc": "={{ $('Normalize Lead').item.json.fbc }}",
+            "Consent At": "={{ $('Normalize Lead').item.json.consent_ts }}",
+            "Last Event At": "={{ $('Normalize Lead').item.json.received_at }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "airtable-update",
+      "name": "Update Lead",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1480, 40]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": { "__rl": true, "mode": "id", "value": "REPLACE_AIRTABLE_BASE_ID" },
+        "table": { "__rl": true, "mode": "name", "value": "Leads" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Lead ID": "={{ $('Normalize Lead').item.json.lead_id }}",
+            "Email": "={{ $('Normalize Lead').item.json.email }}",
+            "Phone": "={{ $('Normalize Lead').item.json.phone }}",
+            "First Name": "={{ $('Normalize Lead').item.json.first_name }}",
+            "Last Name": "={{ $('Normalize Lead').item.json.last_name }}",
+            "ZIP": "={{ $('Normalize Lead').item.json.zip }}",
+            "Gender": "={{ $('Normalize Lead').item.json.gender }}",
+            "Age Range": "={{ $('Normalize Lead').item.json.age_range }}",
+            "Lead Grade": "={{ $('Normalize Lead').item.json.grade }}",
+            "Qualified": "={{ $('Normalize Lead').item.json.qualified }}",
+            "Status": "={{ $('Normalize Lead').item.json.status }}",
+            "Event ID": "={{ $('Normalize Lead').item.json.event_id }}",
+            "Event Name": "={{ $('Normalize Lead').item.json.event_name }}",
+            "Match Quality": "={{ $('Normalize Lead').item.json.match_quality }}",
+            "Estimated Monthly": "={{ $('Normalize Lead').item.json.estimated_monthly }}",
+            "Answers JSON": "={{ $('Normalize Lead').item.json.answers }}",
+            "UTM Source": "={{ $('Normalize Lead').item.json.utm_source }}",
+            "UTM Campaign": "={{ $('Normalize Lead').item.json.utm_campaign }}",
+            "fbp": "={{ $('Normalize Lead').item.json.fbp }}",
+            "fbc": "={{ $('Normalize Lead').item.json.fbc }}",
+            "Consent At": "={{ $('Normalize Lead').item.json.consent_ts }}",
+            "Last Event At": "={{ $('Normalize Lead').item.json.received_at }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "airtable-create",
+      "name": "Create Lead",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1480, 240]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, leadId: $('Normalize Lead').item.json.lead_id, airtable: $json.id || $json.records?.[0]?.id || 'upserted' } }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "respond-ok",
+      "name": "Respond 200",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1740, 140]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: false, error: 'unauthorized' } }}",
+        "options": { "responseCode": 401 }
+      },
+      "id": "respond-401",
+      "name": "Respond 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [500, 460]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true, skipped: true } }}",
+        "options": { "responseCode": 202 }
+      },
+      "id": "respond-skip",
+      "name": "Respond Skipped",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [980, 360]
+    },
+    {
+      "parameters": {},
+      "id": "error-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [0, 640]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": { "__rl": true, "mode": "id", "value": "REPLACE_AIRTABLE_BASE_ID" },
+        "table": { "__rl": true, "mode": "name", "value": "Failures" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Error": "={{ $json.execution?.error?.message || $json.message || 'unknown' }}",
+            "Payload": "={{ JSON.stringify($json) }}",
+            "Failed At": "={{ $now.toISO() }}",
+            "Status": "Open"
+          }
+        }
+      },
+      "id": "airtable-failure",
+      "name": "Log Failure",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [260, 640]
+    }
+  ],
+  "connections": {
+    "Lead Webhook": { "main": [[{ "node": "Valid Secret?", "type": "main", "index": 0 }]] },
+    "Valid Secret?": {
+      "main": [
+        [{ "node": "Normalize Lead", "type": "main", "index": 0 }],
+        [{ "node": "Respond 401", "type": "main", "index": 0 }]
+      ]
+    },
+    "Normalize Lead": { "main": [[{ "node": "Is Conversion?", "type": "main", "index": 0 }]] },
+    "Is Conversion?": {
+      "main": [
+        [{ "node": "Find Existing Lead", "type": "main", "index": 0 }],
+        [{ "node": "Respond Skipped", "type": "main", "index": 0 }]
+      ]
+    },
+    "Find Existing Lead": { "main": [[{ "node": "Lead Exists?", "type": "main", "index": 0 }]] },
+    "Lead Exists?": {
+      "main": [
+        [{ "node": "Update Lead", "type": "main", "index": 0 }],
+        [{ "node": "Create Lead", "type": "main", "index": 0 }]
+      ]
+    },
+    "Update Lead": { "main": [[{ "node": "Respond 200", "type": "main", "index": 0 }]] },
+    "Create Lead": { "main": [[{ "node": "Respond 200", "type": "main", "index": 0 }]] },
+    "Error Trigger": { "main": [[{ "node": "Log Failure", "type": "main", "index": 0 }]] }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "Error Trigger"
+  }
+}
