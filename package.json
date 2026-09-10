@@ -7,7 +7,7 @@
     "dev": "concurrently -n api,web -c cyan,magenta \"npm run dev:api\" \"npm run dev:web\"",
     "dev:web": "vite",
     "dev:api": "tsx watch --env-file=.env server/dev.ts",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/bundle-api.mjs",
     "lint": "oxlint",
     "preview": "vite preview",
     "start": "tsx server/dev.ts"
