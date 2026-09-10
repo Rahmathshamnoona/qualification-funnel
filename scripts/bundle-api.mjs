@@ -1,4 +1,4 @@
-import { unlinkSync } from 'node:fs'
+import { copyFileSync, unlinkSync } from 'node:fs'
 import { build } from 'esbuild'
 
 const names = ['health', 'lead', 'ops']
@@ -15,5 +15,8 @@ await build({
 })
 
 if (process.env.VERCEL) {
-  for (const name of names) unlinkSync(`api/${name}.ts`)
+  for (const name of names) {
+    copyFileSync(`api/${name}.js`, `api/${name}.ts`)
+    unlinkSync(`api/${name}.js`)
+  }
 }
